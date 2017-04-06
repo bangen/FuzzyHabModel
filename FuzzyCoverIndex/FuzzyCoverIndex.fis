@@ -21,19 +21,19 @@ MF3='High':'trapmf',[3 4 400 400]
 
 [Input2]
 Name='UndercutDistance'
-Range=[0 1000]
+Range=[0 100]
 NumMFs=3
-MF1='Near':'trapmf',[0 0 4 7]
-MF2='NotFar':'trimf',[4 7 10]
-MF3='Far':'trapmf',[7 10 1000 1000]
+MF1='Near':'trapmf',[0 0 1 1.5]
+MF2='NotFar':'trimf',[1 1.5 2]
+MF3='Far':'trapmf',[1.5 2 100 100]
 
 [Input3]
 Name='DeepPoolDistance'
-Range=[0 1000]
+Range=[0 100]
 NumMFs=3
-MF1='Near':'trapmf',[0 0 4 7]
-MF2='NotFar':'trimf',[4 7 10]
-MF3='Far':'trapmf',[7 10 1000 1000]
+MF1='Near':'trapmf',[0 0 1 1.5]
+MF2='NotFar':'trimf',[1 1.5 2]
+MF3='Far':'trapmf',[1.5 2 100 100]
 
 [Output1]
 Name='CoverIndex'

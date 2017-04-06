@@ -23,8 +23,7 @@
 # Set user-defined  input parameters
 # -----------------------------------
 
-folderPath = r'C:\et_al\Shared\Projects\USA\CHaMP\ResearchProjects\HabitatSuitability\wrk_Data\TestRuns\LargeSites\YFI00001-001971\2016\VISIT_4180\Sims\FIS\Inputs'
-widthCategory = 16.0
+data = r"C:\et_al\Shared\Projects\USA\CHaMP\ResearchProjects\HabitatSuitability\wrk_Data\FISValidation\ChinookSpawner\UGR_ValidationSites.csv"
 
 # -----------------------------------
 # Start of script
@@ -32,22 +31,32 @@ widthCategory = 16.0
 #  import required modules and extensions
 import numpy
 import os
+import pandas
 import arcpy
 from arcpy.sa import *
+
 arcpy.CheckOutExtension('Spatial')
 
+visits = pandas.read_csv(data)
 
-def main():
+def coverIndexInputs(visitPath, bfw):
+#def coverIndexInputs(row):
 
-    arcpy.Delete_management("in_memory")
+    # visitPath = row['visit.dir']
+    # bfw = row['AveBFW']
+
+    print visitPath
+    print bfw
 
     #  environment settings
-    arcpy.env.workspace = folderPath  # set workspace to pf
+    fcPath = visitPath + '/Sims/FIS/Inputs'
+    arcpy.env.workspace = fcPath
+    print arcpy.env.workspace
     arcpy.env.overwriteOutput = True  # set to overwrite output
 
     #  import required rasters + shapefiles
     wd = Raster('Water_Depth.tif')
-    units = 'Channel_Units.shp'
+    units = arcpy.CopyFeatures_management('Channel_Units.shp', 'in_memory/units')
     wePoly = 'WaterExtent.shp'
     wePoints = 'EdgeofWater_Points.shp'
 
@@ -57,60 +66,87 @@ def main():
     arcpy.env.outputCoordinateSystem = desc.SpatialReference
     arcpy.env.cellSize = desc.meanCellWidth
 
-    #  --- lwd count --
+    # create layer from channel units shp
     arcpy.MakeFeatureLayer_management(units, 'units_lyr')
 
-    #  read in wood xlsx
-    inTblLWD = arcpy.ListFiles('LargeWood*')[0]
-    arcpy.ExcelToTable_conversion(inTblLWD, 'in_memory/tbl_lw')
+    #  --- channel unit tier 1/tier 2 attributes ---
+    # if tier1/tier2 attributes exist delete them
+    # [some cu fcs don't have fields, some do but are not populated, some do and are populated]
+    tfield = arcpy.ListFields('units_lyr', 'Tier1')
+    if len(tfield) >= 1:
+        arcpy.DeleteField_management('units_lyr',['Tier1', 'Tier2'])
 
-    if 'Piece' in inTblLWD:
-        #  remove 'dry' rows
-        with arcpy.da.UpdateCursor('in_memory/tbl_lw', 'LargeWoo_1') as cursor:
-            for row in cursor:
-                if row[0] == 'Dry':
-                    cursor.deleteRow()
+    #  read in cu xlsx
+    arcpy.TableToTable_conversion('ChannelUnit.csv', 'in_memory', 'tbl_cus')
+    arcpy.JoinField_management('units_lyr', 'Unit_Numbe', 'in_memory/tbl_cus', 'ChannelUnitNumber', ['Tier1', 'Tier2'])
 
-        arcpy.AddField_management('in_memory/tbl_lw', 'Count', 'SHORT')
-        with arcpy.da.UpdateCursor('in_memory/tbl_lw', 'Count') as cursor:
-            for row in cursor:
-                row[0] = 1
-                cursor.updateRow(row)
+    #  --- lwd count --
+    if len(arcpy.ListFiles('LargeWood*')) > 0:
 
-        arcpy.Statistics_analysis('in_memory/tbl_lw', 'in_memory/tbl_lw2', [['Count', 'SUM']], 'ChannelU_1')
+        #  read in wood xlsx
+        inTblLWD = arcpy.ListFiles('LargeWood*')[0]
+        arcpy.TableToTable_conversion(inTblLWD, 'in_memory', 'tbl_lw')
 
-        # join wood count to units
-        arcpy.JoinField_management('units_lyr', 'Unit_Numbe', 'in_memory/tbl_lw2', 'ChannelU_1', 'SUM_Count')
+        if 'Piece' in inTblLWD:
+            #  remove 'dry' rows
+            with arcpy.da.UpdateCursor('in_memory/tbl_lw', 'LargeWoodType') as cursor:
+                for row in cursor:
+                    if row[0] == 'Dry':
+                        cursor.deleteRow()
 
-        #  add/calculate lwd density field
-        arcpy.AddField_management('units_lyr', 'lwDen100m2', 'DOUBLE')
-        fields = ['SHAPE@AREA', 'SUM_Count', 'lwDen100m2']
-        with arcpy.da.UpdateCursor('units_lyr', fields) as cursor:
-            for row in cursor:
-                row[2] = float(row[1] / row[0]) * 100
-                cursor.updateRow(row)
+            arcpy.AddField_management('in_memory/tbl_lw', 'Count', 'SHORT')
+            with arcpy.da.UpdateCursor('in_memory/tbl_lw', 'Count') as cursor:
+                for row in cursor:
+                    row[0] = 1
+                    cursor.updateRow(row)
+
+            arcpy.Statistics_analysis('in_memory/tbl_lw', 'in_memory/tbl_lw2', [['Count', 'SUM']], 'ChannelUnit_ChannelUnitNumber')
+
+            # join wood count to units
+            arcpy.JoinField_management('units_lyr', 'Unit_Numbe', 'in_memory/tbl_lw2', 'ChannelUnit_ChannelUnitNumber', 'SUM_Count')
+            ##arcpy.CopyFeatures_management('units_lyr', 'tmp_units_lyr.shp')
+            #  add/calculate lwd density field
+            arcpy.AddField_management('units_lyr', 'lwDen100m2', 'DOUBLE')
+            fields = ['SHAPE@AREA', 'SUM_Count', 'lwDen100m2']
+            with arcpy.da.UpdateCursor('units_lyr', fields) as cursor:
+                for row in cursor:
+                    if row[1] > 0:
+                        row[2] = float(row[1] / row[0]) * 100
+                    else:
+                        row[2] = 0.0
+                    cursor.updateRow(row)
+        else:
+            #  remove 'dry' rows
+            with arcpy.da.UpdateCursor('in_memory/tbl_lw', 'LargeWoodType') as cursor:
+                for row in cursor:
+                    if row[0] == 'Dry':
+                        cursor.deleteRow()
+
+            # join wood count to units
+            arcpy.JoinField_management('units_lyr', 'Unit_Numbe', 'in_memory/tbl_lw', 'ChannelUnit_ChannelUnitNumber', ['SumLWDCount'])
+
+            #  add/calculate lwd density field
+            arcpy.AddField_management('units_lyr', 'lwDen100m2', 'DOUBLE')
+            fields = ['SHAPE@AREA', 'SumLWDCount', 'lwDen100m2']
+            with arcpy.da.UpdateCursor('units_lyr', fields) as cursor:
+                for row in cursor:
+                    if row[1] > 0:
+                        row[2] = float(row[1] / row[0]) * 100
+                    else:
+                        row[2] = 0.0
+                    cursor.updateRow(row)
+
+        #  convert to raster
+        arcpy.PolygonToRaster_conversion('units_lyr', 'lwDen100m2', 'in_memory/lwDensity', 'CELL_CENTER', '', 0.1)
+        lwClip = ExtractByMask('in_memory/lwDensity', 'Channel_Units.shp')
+        lwClip.save('lwDensity.tif')
+
     else:
-        #  remove 'dry' rows
-        with arcpy.da.UpdateCursor('in_memory/tbl_lw', 'LargeWoodT') as cursor:
-            for row in cursor:
-                if row[0] == 'Dry':
-                    cursor.deleteRow()
+        lwRaw = Con(wd >= 0, 100)
+        lwClip = ExtractByMask(lwRaw, 'Channel_Units.shp')
+        lwClip.save('lwDensity.tif')
 
-        # join wood count to units
-        arcpy.JoinField_management('units_lyr', 'Unit_Numbe', 'in_memory/tbl_lw', 'ChannelU_1', 'SumLWDCoun')
-
-        #  add/calculate lwd density field
-        arcpy.AddField_management('units_lyr', 'lwDen100m2', 'DOUBLE')
-        fields = ['SHAPE@AREA', 'SumLWDCoun', 'lwDen100m2']
-        with arcpy.da.UpdateCursor('units_lyr', fields) as cursor:
-            for row in cursor:
-                row[2] = float(row[1] / row[0]) * 100
-                cursor.updateRow(row)
-
-    #  convert to raster
-    arcpy.PolygonToRaster_conversion('units_lyr', 'lwDen100m2', 'in_memory/lwDensity', 'CELL_CENTER', '', 0.1)
-    lwClip = ExtractByMask('in_memory/lwDensity', units)
-    lwClip.save('lwDensity.tif')
+    #  clip to wetted extent and save output
 
     lw = Raster('lwDensity.tif')
 
@@ -124,24 +160,25 @@ def main():
         ZonalStatisticsAsTable('units_lyr', 'Unit_Numbe', wd, 'in_memory/tbl_wd', 'DATA', 'MAXIMUM')
 
         #  join max value back to pool units
-        arcpy.JoinField_management('units_lyr', 'Unit_Numbe', 'in_memory/tbl_wd', 'Unit_Numbe', 'MAX')
+        arcpy.JoinField_management('units_lyr', 'Unit_Numbe', 'in_memory/tbl_wd', 'Unit_Numbe', ['MAX'])
 
         #  remove pools units with depth < 80 cm
-        if widthCategory <= 10.0:
+        if bfw <= 10.0:
             arcpy.SelectLayerByAttribute_management('units_lyr', 'REMOVE_FROM_SELECTION', """ "MAX" < 0.43 """)
         else:
             arcpy.SelectLayerByAttribute_management('units_lyr', 'REMOVE_FROM_SELECTION', """ "MAX" < 0.86 """)
 
         if int(arcpy.GetCount_management('units_lyr').getOutput(0)) > 0:
             #  calculate euclidean distance
-            poolDist = EucDistance('units_lyr')
+            poolDistRaw = EucDistance('units_lyr')
+            poolDist = poolDistRaw / bfw
         else:
-            poolDist = Con(lw >= 0, 1000)
+            poolDist = Con(lw >= 0, 100)
     else:
-        poolDist = Con(lw >= 0, 1000)
+        poolDist = Con(lw >= 0, 100)
 
     #  clip to wetted extent and save output
-    poolDistClip = ExtractByMask(poolDist, units)
+    poolDistClip = ExtractByMask(poolDist, 'Channel_Units.shp')
     poolDistClip.save('DeepPoolDist.tif')
 
     #  clear selection on units lyr
@@ -172,11 +209,10 @@ def main():
     #  read in undercuts xlsx
     if len(arcpy.ListFiles('UndercutBank*')) > 0:
 
-        inTblUC = arcpy.ListFiles('UndercutBank*')[0]
-        arcpy.ExcelToTable_conversion(inTblUC, 'in_memory/tbl_uc')
+        arcpy.TableToTable_conversion('UndercutBank.csv', 'in_memory', 'tbl_uc')
 
         #  join undercuts to units
-        arcpy.JoinField_management(units, 'Unit_Numbe', 'in_memory/tbl_uc', 'ChannelU_1', 'Bank')
+        arcpy.JoinField_management(units, 'Unit_Numbe', 'in_memory/tbl_uc', 'ChannelUnit_ChannelUnitNumber', ['Bank'])
 
         #  make separate lyrs for rr + lr undercuts
         arcpy.MakeFeatureLayer_management(units, 'rr_uc_lyr', """ "Bank" = 'Right' """)
@@ -190,12 +226,13 @@ def main():
         arcpy.Merge_management(['in_memory/rr_uc', 'in_memory/rl_uc'], 'in_memory/ucs')
 
         #  calculate euclidean distance
-        ucDist = EucDistance('in_memory/ucs')
+        ucDistRaw = EucDistance('in_memory/ucs')
+        ucDist = ucDistRaw / bfw
     else:
-        ucDist = Con(lw >= 0, 1000)
+        ucDist = Con(lw >= 0, 100)
 
     #  clip to wetted extent and save output
-    ucDistClip = ExtractByMask(ucDist, units)
+    ucDistClip = ExtractByMask(ucDist, 'Channel_Units.shp')
     ucDistClip.save('UndercutDist.tif')
 
     #  --- output table with values for each input raster --
@@ -212,7 +249,20 @@ def main():
 
     #  convert to numpy array and save as txt file
     nparr = arcpy.da.FeatureClassToNumPyArray('coverIndex_Inputs.shp', ['SHAPE@X', 'SHAPE@Y', 'lwDensity', 'ucDist', 'poolDist'])
-    numpy.savetxt(os.path.join(arcpy.env.workspace, 'coverIndex_Inputs.csv'), nparr, fmt="%s", delimiter=",", header = str('x,y,lwdCount,ucDist,poolDist'))
+    numpy.savetxt(os.path.join(arcpy.env.workspace, 'coverIndex_Inputs.csv'), nparr, fmt="%s", delimiter=",", header = str('x,y,lwdCount,ucDist,poolDist'), comments = '')
 
-if __name__ == '__main__':
-    main()
+    del visitPath
+    del bfw
+    arcpy.Delete_management("in_memory")
+
+#visits[['visit.dir','AveBFW']].apply(coverIndexInputs, axis=1) #! doesn't work
+#visits.apply(coverIndexInputs, axis=1, args=('visit.dir','AveBFW')) #! doesn't work
+#visits.apply(lambda x: coverIndexInputs(x['visit.dir'], x['AveBFW']), axis = 1) #! works but repeats 1st row after running 2nd
+#visits[['visit.dir','AveBFW']].apply(lambda x: coverIndexInputs(x[0], x[1]), axis=1) #! works but repeats 1st row after running 2nd
+
+visitPath = visits['visit.dir'].iloc[32]
+bfw = visits['AveBFW'].iloc[32]
+coverIndexInputs(visitPath, bfw)
+
+#visits.apply(coverIndexInputs, axis=1)
+
