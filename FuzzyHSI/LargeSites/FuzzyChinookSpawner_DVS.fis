@@ -34,9 +34,9 @@ Name='GrainSize_mm'
 Range=[0 4000]
 NumMFs=4
 MF1='FinesSand':'trapmf',[0 0 2 4]
-MF2='FineGravel':'trapmf',[2 4 16 18]
-MF3='CoarseGravel':'trapmf',[16 18 64 68]
-MF4='CobbleBoulder':'trapmf',[64 68 4000 4000]
+MF2='FineGravel':'trapmf',[2 4 16 32]
+MF3='CoarseGravel':'trapmf',[16 32 64 96]
+MF4='CobbleBoulder':'trapmf',[64 96 4000 4000]
 
 [Output1]
 Name='HabitatSuitablity'
