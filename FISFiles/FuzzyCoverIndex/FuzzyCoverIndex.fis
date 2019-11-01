@@ -1,0 +1,66 @@
+[System]
+Name='CoverIndex'
+Type='mamdani'
+Version=2.0
+NumInputs=3
+NumOutputs=1
+NumRules=19
+AndMethod='min'
+OrMethod='max'
+ImpMethod='min'
+AggMethod='max'
+DefuzzMethod='centroid'
+
+[Input1]
+Name='LWDensity'
+Range=[0 400]
+NumMFs=3
+MF1='Low':'trimf',[0 0 1]
+MF2='Moderate':'trapmf',[0 1 3 4]
+MF3='High':'trapmf',[3 4 400 400]
+
+[Input2]
+Name='UndercutDistance'
+Range=[0 100]
+NumMFs=3
+MF1='Near':'trapmf',[0 0 1 1.5]
+MF2='NotFar':'trimf',[1 1.5 2]
+MF3='Far':'trapmf',[1.5 2 100 100]
+
+[Input3]
+Name='DeepPoolDistance'
+Range=[0 100]
+NumMFs=3
+MF1='Near':'trapmf',[0 0 1 1.5]
+MF2='NotFar':'trimf',[1 1.5 2]
+MF3='Far':'trapmf',[1.5 2 100 100]
+
+[Output1]
+Name='CoverIndex'
+Range=[0 1]
+NumMFs=4
+MF1='None':'trimf',[0 0 0.1]
+MF2='Low':'trapmf',[0 0.1 0.3 0.4]
+MF3='Moderate':'trapmf',[0.3 0.4 0.8 0.9]
+MF4='High':'trapmf',[0.8 0.9 1 1]
+
+[Rules]
+1 1 1, 4 (1) : 1
+1 1 2, 3 (1) : 1
+1 1 3, 3 (1) : 1
+1 2 1, 3 (1) : 1
+1 2 2, 2 (1) : 1
+1 2 3, 2 (1) : 1
+1 3 1, 3 (1) : 1
+1 3 2, 2 (1) : 1
+1 3 3, 1 (1) : 1
+2 1 1, 4 (1) : 1
+2 1 2, 4 (1) : 1
+2 1 3, 3 (1) : 1
+2 2 1, 4 (1) : 1
+2 2 2, 3 (1) : 1
+2 2 3, 2 (1) : 1
+2 3 1, 3 (1) : 1
+2 3 2, 2 (1) : 1
+2 3 3, 2 (1) : 1
+3 0 0, 4 (1) : 1
